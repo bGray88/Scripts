@@ -1,0 +1,1 @@
+for /f "tokens=*" %%d in ('dir /ad/b/s ^| sort /R') do rd "%%d"

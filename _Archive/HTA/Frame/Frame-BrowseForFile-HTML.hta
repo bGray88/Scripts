@@ -1,0 +1,57 @@
+
+<html>
+<head>
+<title>Browse for File</title>
+<HTA:APPLICATION
+ APPLICATIONNAME="Browse for File"
+ ID="browseforfile"
+ BORDER="thin"
+ MAXIMIZEBUTTON = "No"
+ SCROLL = "Yes"
+ SINGLEINSTANCE = "Yes"
+ VERSION="1.0"/>
+</head>
+
+<script language="VBScript">	
+	Sub Window_OnLoad
+		intWidth = "600"
+		intHeight = "300"
+		window.resizeTo intWidth, intHeight
+		intLeft = (screen.width - document.body.clientwidth)/2
+		intTop = (screen.availHeight - document.body.clientheight)/2 
+		window.moveTo intLeft, intTop
+	End Sub
+	
+	Sub SelectFile()
+		If Trim(file.Value) <> "" Then
+			Dim strFileValue
+			strFileValue = file.Value
+			DataArea.InnerHtml = strFileValue
+			file.Value = ""
+			Main(strFileValue)
+			Window.Close
+		End If
+	End Sub
+	
+	Sub Main(strFileSelected)
+		MsgBox(strFileSelected)
+	End Sub
+</script>
+<body bgcolor="white">
+	<p>
+	<br>
+	<input type="file" name="file" size="50"/>
+	<br>
+	</p>
+	<p>
+	<input type="button" name="btnSelectFile" id="btnSelectFile" _
+		value=" SelectFile " onclick="SelectFile">
+	<input type="button" name="btnExit" id="btnExit" _
+		value="     Exit     " onclick="Self.Close()">
+	</p>
+	<p>
+	<Span ID = "DataArea" >File Select<Span/>
+	<br>
+	</p>
+</body>
+</html>

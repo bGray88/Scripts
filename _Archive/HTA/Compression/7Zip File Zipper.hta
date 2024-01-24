@@ -1,0 +1,544 @@
+
+<html>
+<head>
+<title>7Zip File Zipper</title>
+<HTA:APPLICATION
+ APPLICATIONNAME="7Zip File Zipper"
+ ID="7zfilezipper"
+ BORDER="thin"
+ MAXIMIZEBUTTON="No"
+ SCROLL="Yes"
+ SINGLEINSTANCE="Yes"
+ VERSION="1.0"/>
+</head>
+
+<script language="VBScript">
+	Dim strFileLocPath
+	Dim strIsFile : strIsFile = False
+	Dim Zip7ZipFlags : Zip7ZipFlags = "a -t7z -m0=lzma2:d27 -mx9 -mfb=64 -md=32m -ms=on -mmt4"
+	Dim ZipZipFlags : ZipZipFlags = "a -tzip"
+	Dim ZipUseType
+	Dim strZipExt
+	
+	Sub Window_OnLoad
+		intWidth = (Screen.Width - Document.Body.ClientWidth)/.7
+		intHeight = (Screen.AvailHeight - Document.Body.ClientHeight)/.6
+		Window.ResizeTo intWidth, intHeight
+		intLeft = (Screen.Width - Document.Body.ClientWidth)/2
+		intTop = (Screen.AvailHeight - Document.Body.ClientHeight)/2
+		Window.MoveTo intLeft, intTop
+		iptfiletype.Disabled = True
+		iptfiletype.Style.BackgroundColor = "LightGray"
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Clears open resources and closes the window
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub ExitProgram
+		Dim objShell : Set objShell = CreateObject("WScript.Shell")
+		Dim strKillCommand : strKillCommand = "taskkill /im mshta.exe /f"
+		
+		Window.Close
+		Set objShellExec = objShell.Exec(DoubleQuotes(strKillCommand))
+		WaitSeconds 5
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Enables or disables file type input based on zip type selected
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub FileTypeAvailable
+		Select Case cbziptype.Value
+			Case "ZipAllFilesTypeSeperate"
+				strIsFile = True
+				iptfiletype.Disabled = False
+				iptfiletype.Style.BackgroundColor = "White"
+			Case "ZipAllSubfolderFilesCombined"
+				strIsFile = False
+				iptfiletype.Disabled = True
+				iptfiletype.Style.BackgroundColor = "LightGray"
+			Case "ZipSingleFolderCombined"
+				strIsFile = False
+				iptfiletype.Disabled = True
+				iptfiletype.Style.BackgroundColor = "LightGray"
+			Case Else
+				strIsFile = False
+				iptfiletype.Disabled = True
+				iptfiletype.Style.BackgroundColor = "LightGray"
+		End Select
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Updates the file location indicator if a location has been selected
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub FileLocationUpdate
+		If strFileLocPath <> "" Then
+			iptfileloc.value = strFileLocPath
+		End If
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Updates the compression type to be used when zipping
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub CompressTypeUpdate
+		Select Case cbcompresstype.Value
+			Case "7z"
+				ZipUseType = Zip7ZipFlags
+				strZipExt = ".7z"
+			Case "zip"
+				ZipUseType = ZipZipFlags
+				strZipExt = ".zip"
+		End Select
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Update the selected file path location
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub FindFiles
+		strFileLocPath = BrowseForFolder("Browse For File Folder", "")
+		FileLocationUpdate
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Determine preferred Zip type and set File or Folder variable
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub ProcessSelectedZipType
+		Select Case cbziptype.Value
+			Case "ZipAllFilesTypeSeperate"
+				If ErrHandling = 0 Then
+					ZipAllFilesTypeSeperate
+				End If
+			Case "ZipAllSubfolderFilesCombined"
+				If ErrHandling = 0 Then
+					ZipAllSubfolderFilesCombined
+				End If
+			Case "ZipSingleFolderCombined"
+				If ErrHandling = 0 Then
+					ZipSingleFolderCombined
+				End If
+			Case Else
+				MsgBox("Please Select A Valid Zip Type")
+				Exit Sub
+		End Select
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Explore all subfolders and zip the contents of the lowest branch
+	'
+	' Inputs:	Current folder path
+	'**********************************************************************************************
+	Sub RecursiveZipping(strFolderPath)	
+		Const objShellFinished = 1, objShellFailed = 2
+		Dim objFolder, objShellExec
+		Dim colFolders, colFiles
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		Set objFolder = objFSO.GetFolder(strFolderPath)
+		Set colFolders = objFolder.SubFolders
+		
+		If colFolders.Count > 0 Then
+			For Each objItem In colFolders
+				RecursiveZipping(objItem)
+			Next
+		ElseIf FolderEmpty(strFolderPath) Then
+			' Do Nothing
+		Else
+			Dim objShell : Set objShell = CreateObject("WScript.Shell")
+			Dim strZipExe : strZipExe = "C:\Program Files\7-Zip\7zG.exe"
+			Dim strFullPath
+			Dim blnZipExists : blnZipExists = False
+			
+			Set colFiles = objFolder.Files
+			strFullPath = objFolder & "\"
+			strFolderName = GetFileFolderName(strFolderPath)
+			strSavePath = strFullPath
+			strSaveName = strFolderName
+			
+			For Each objItem In colFiles
+				If objFSO.FileExists(strSavePath & strSaveName & strZipExt) Then
+					blnZipExists = True
+				End If
+			Next
+			
+			If blnZipExists = False Then
+				Set objShellExec = objShell.Exec(DoubleQuotes(strZipExe) & " " & _
+				ZipUseType & " " & _
+				DoubleQuotes(strSavePath & strSaveName & strZipExt) & " " & _
+				DoubleQuotes(strFullPath & "*"))
+				Do While objShellExec.Status <> objShellFinished
+					WaitSeconds 1
+				Loop
+				
+				If FileExists(strSavePath & strSaveName & strZipExt) Then
+					For Each objItem In colFiles
+						If objItem <> strSavePath & strSaveName & strZipExt Then
+							DeleteFile objItem
+						End If
+					Next
+				End If
+				
+			End If
+		End If
+		Set objFolder = Nothing
+		Set colFiles = Nothing
+		Set objShell = Nothing
+		Set objShellExec = Nothing
+		Set objShell = Nothing
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	Use 7Zip to zip multiple files of a specified type
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub ZipAllFilesTypeSeperate
+		Const objShellFinished = 1, objShellFailed = 2
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		Dim objShell : Set objShell = CreateObject("WScript.Shell")
+		Dim objFolder, objShellExec
+		Dim colFiles
+		Dim strZipExe : strZipExe = "C:\Program Files\7-Zip\7zG.exe"
+		Dim strFullPath, strExtName, strFolderName, strSavePath
+		
+		Set objFolder = objFSO.GetFolder(strFileLocPath)
+		Set colFiles = objFolder.Files
+		
+		strFolderName = GetFileFolderName(strFileLocPath)
+		strFullPath = strFileLocPath & "\"
+		strSavePath = strFullPath
+		
+		For Each objItem In colFiles
+			If Not objFSO.FileExists(strSavePath & Replace(objItem.Name,"." & strExtName, "") & strZipExt) Then
+				strExtName = GetExtension(objItem)
+				If strExtName = document.getElementById("iptfiletype").value Then
+					Set objShellExec = objShell.Exec(DoubleQuotes(strZipExe) & " " & _
+					ZipUseType & " " & _
+					DoubleQuotes(strSavePath & Replace(objItem.Name,"." & strExtName, "") & strZipExt) & " " & _
+					DoubleQuotes(strFullPath & objItem.Name))
+					Do While objShellExec.Status <> objShellFinished
+						WaitSeconds 1
+					Loop
+					If FileExists(strSavePath & Replace(objItem.Name,"." & strExtName, "") & strZipExt) Then
+						DeleteFile strFullPath & objItem.Name
+					End If
+				End If
+			End If
+		Next
+		
+		MsgBox("File(s) Zip Successful")
+		Set objFolder = Nothing
+		Set colFiles = Nothing
+		Set objShell = Nothing
+		Set objShellExec = Nothing
+		Set objShell = Nothing
+	End Sub
+		
+	'******************************************************************************
+	' Purpose:	7z selected files to maximum zip specifications
+	'
+	' Inputs:	The full folder path to files, files with specific extension
+	'			to be zipped
+	'******************************************************************************
+	Sub ZipAllSubfolderFilesCombined
+		RecursiveZipping strFileLocPath
+		
+		MsgBox("File(s) Zip Successful")
+	End Sub
+
+	'**********************************************************************************************
+	' Purpose:	Use 7Zip to zip a single folder contents
+	'
+	' Inputs:	N/A
+	'**********************************************************************************************
+	Sub ZipSingleFolderCombined
+		Const objShellFinished = 1, objShellFailed = 2
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		Dim objShell : Set objShell = CreateObject("WScript.Shell")
+		Dim objShellExec, objFolder
+		Dim strZipExe : strZipExe = "C:\Program Files\7-Zip\7zG.exe"
+		Dim strSelectedPath, strFolderName
+		Dim blnZipExists : blnZipExists = False
+				
+		strFolderName = GetFileFolderName(strFileLocPath)
+		strFullPath = strFileLocPath & "\"
+		strSavePath = Replace(strFileLocPath, strFolderName, "")
+		
+		Set objFolder = objFSO.GetFolder(strSavePath)
+		Set colFiles = objFolder.Files
+		
+		For Each objItem In colFiles
+			If objFSO.FileExists(strSavePath & strFolderName & strZipExt) Then
+				blnZipExists = True
+			End If
+		Next
+			
+		If Not blnZipExists Then
+			Set objShellExec = objShell.Exec(DoubleQuotes(strZipExe) & " " & _
+			ZipUseType & " " & _
+			DoubleQuotes(strSavePath & strFolderName & strZipExt) & " " & _
+			DoubleQuotes(strFullPath & "*"))
+			Do While objShellExec.Status <> objShellFinished
+				WaitSeconds 1
+			Loop
+			If FileExists(strSavePath & strFolderName & strZipExt) Then
+				DeleteFolder strFileLocPath
+			End If
+		End If
+		
+		MsgBox("File(s) Zip Successful")
+		Set objFolder = Nothing
+		Set colFiles = Nothing
+		Set objShell = Nothing
+		Set objShellExec = Nothing
+		Set objShell = Nothing
+	End Sub
+
+	'******************************************************************************
+	' Purpose:	Displays a dialogue box prompting for folder selection
+	'
+	' Inputs:	Title bar header text, starting directory for dialogue box
+	'
+	' Returns:	A string object of the full path to selected folder
+	'******************************************************************************
+	Function BrowseForFolder(strTitleBar, strStartDir)
+		Const WinHandle = 0, Options = 0
+		Dim objShell, objItem
+		
+		Set objShell = CreateObject("Shell.Application")
+		Set objItem = objShell.BrowseForFolder(WinHandle, strTitleBar, _
+			Options, strStartDir)
+		Set objShell = Nothing
+		
+		If Not objItem Is Nothing Then
+			If IsObject(objItem) Then
+				BrowseForFolder = objItem.Self.Path
+			End If
+		Else
+			BrowseForFolder = ""
+		End If
+		
+		Set objItem = Nothing
+		Set objShell = Nothing
+	End Function
+
+	'******************************************************************************
+	' Purpose:	Delete specified file
+	'
+	' Inputs:	The full path to select file
+	'******************************************************************************
+	Sub DeleteFile(strFileName)
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		objFSO.DeleteFile(strFileName)
+		Set objFSO = Nothing
+	End Sub
+
+	'******************************************************************************
+	' Purpose:	Delete specified folder
+	'
+	' Inputs:	The full path to select folder
+	'******************************************************************************
+	Sub DeleteFolder(strFolderPath)
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		objFSO.DeleteFolder strFolderPath, True
+		Set objFSO = Nothing
+	End Sub
+
+	'******************************************************************************
+	' Purpose:	Surrounds string in escaped quote for literal string value
+	'
+	' Inputs:	The string to be encapsulated
+	'
+	' Returns:	The encapsulated string value
+	'******************************************************************************
+	Function DoubleQuotes(strIn)
+		DoubleQuotes = """" & strIn & """"
+	End Function
+	
+	'******************************************************************************
+	' Purpose:	To manually manage errors
+	'
+	' Inputs:	An integer value to indicate error
+	'******************************************************************************
+	Function ErrHandling		
+		If strIsFile Then
+			If document.getElementById("iptfiletype").value = "" Then
+				MsgBox("Please Enter A Valid File Type In The Box")
+				ErrHandling = -1
+				Exit Function
+			Else
+				ErrHandling = 0
+			End If
+		End If
+		If document.getElementById("cbcompresstype").value = "" Then
+			MsgBox("Please Enter A Valid Compression Type In The Box")
+			ErrHandling = -1
+			Exit Function
+		End If
+		If strFileLocPath = "" Then
+			MsgBox("Please Select A Valid Folder Location")
+			ErrHandling = -1
+			Exit Function
+		Else
+			ErrHandling = 0
+		End If
+	End Function
+		
+	'******************************************************************************
+	' Purpose:	Finds whether the existence of a file is absolute
+	'
+	' Inputs:	The full path to possible file including the file name
+	'
+	' Returns:	Boolean value of determined file existence
+	'******************************************************************************
+	Function FileExists(strFilePath)
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		If objFSO.FileExists(strFilePath) Then
+			FileExists = True
+		Else
+			FileExists = False
+		End If
+		Set objFSO = Nothing
+	End Function
+
+	'******************************************************************************
+	' Purpose:	Determines whether strFileName is an empty folder
+	'
+	' Inputs:	The full path to a folder
+	'
+	' Returns:	Boolean value of determined folder contents
+	'******************************************************************************
+	Function FolderEmpty(strFolderPath)
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+		If objFSO.FolderExists(strFolderPath) Then
+			Dim objFolder : Set objFolder = objFSO.GetFolder(strFolderPath)
+			If objFolder.Files.Count = 0 And objFolder.SubFolders.Count = 0 Then
+				FolderEmpty = True
+			Else
+				FolderEmpty = False
+			End If
+		End If
+		Set objFSO = Nothing
+		Set objFolder = Nothing
+	End Function
+			
+	'******************************************************************************
+	' Purpose:	Finding the multi character extension value of a file
+	'
+	' Inputs:	The full path to a file
+	'
+	' Returns:	The multi character extension value of a file
+	'******************************************************************************
+	Function GetExtension(strFileName)	
+		Dim intNextDot : intNextDot = 0
+		Dim intLastDot : intLastDot = 0
+		Dim intCounter : intCounter = 1
+
+		Do While intCounter <> Len(strFileName)
+			intNextDot = InStr(intCounter, strFileName, ".")
+			If intNextDot = 0 Then
+				Exit Do
+			Else
+				intCounter = intNextDot + 1
+			End If
+			intLastDot = intNextDot
+		Loop
+		Dim strFileBase : strFileBase = Left(strFileName, intLastDot)
+		GetExtension = Replace(strFileName, strFileBase, "")
+	End Function
+
+	'******************************************************************************
+	' Purpose:	Determine the name of the lowest level folder name in path
+	'
+	' Inputs:	String format tree path ex: "C:\WINDOWS\System32"
+	'
+	' Returns:	String of the name of the lowest level folder name in path
+	'******************************************************************************
+	Function GetFileFolderName(strFolderPath)
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		Dim objFolder : Set objFolder = objFSO.GetFolder(strFolderPath)
+		GetFileFolderName = objFolder.Name
+		Set objFSO = Nothing
+		Set objFolder = Nothing
+	End Function
+
+	'******************************************************************************
+	' Purpose:	HTA or WScript sleep function
+	'
+	' Inputs:	The time to sleep in seconds
+	'******************************************************************************
+	Sub WaitSeconds(intSeconds)
+		Const HideWindow = 0, ShowWindow = 1
+		Const WaitForCompletion = True, SkipPastCompletion = False
+		Dim strPingCommand
+		Dim objWShell
+		Dim intTimeWaitSeconds : intTimeWaitSeconds = intSeconds
+		
+		Set objWShell = CreateObject("WScript.Shell")
+		
+		strPingCommand = "cmd /c ping 1.1.1.1 -n 1 -w " & intTimeWaitSeconds
+		objWShell.Run strPingCommand, HideWindow, WaitForCompletion
+		
+		Set objWShell = Nothing
+	End Sub
+	
+</script>
+<body bgcolor='white'>
+	<p style='color:White' 'align='center'>
+	<label>BLANK</label>
+	</p>
+	<p align='center'>
+	<label>Compression Type</label>
+	<select size='1' name='cbcompresstype' onchange='CompressTypeUpdate'>
+		<option value=''></option>
+		<option value='7z'>7zip</option>
+		<option value='zip'>zip</option>
+	</select>
+	</p>
+	<p align='center'>
+	<label>Zip Type</label>
+	<select size='1' name='cbziptype' onchange='FileTypeAvailable'>
+		<option value=''></option>
+		<option value='ZipAllFilesTypeSeperate'>7z All Files of Type - Seperate</option>
+		<option value='ZipAllSubfolderFilesCombined'>7z All Subfolder Files - Combined</option>
+		<option value='ZipSingleFolderCombined'>7z Single Folder - Combined</option>
+	</select>
+	</p>
+	<p align='center'>
+	<label>File Type</label>
+	<input type='text' name='iptfiletype' size='30'>
+	</p>
+	<p align='center'>
+	<label>File Location</label>
+	<input type='text' name='iptfileloc' size='30' _
+		style='background=lightgray; color=black' disabled='true'>
+	</p>
+	<p align='center'>
+	<input type='button' name='btnfolderbrowse' id='btnfolderbrowse' _
+		value='   Set File Folder   ' onclick='FindFiles'>
+	<input type='button' name='btnzipfiles' id='btnzipfiles' _
+		value='       Process       ' onclick='ProcessSelectedZipType'>
+	</p>
+	<p align='center'>
+	<input type='button' name='btnExit' id='btnExit' _
+		value='         Exit         ' _
+		onclick='ExitProgram'>
+	</p>
+	<p align='center'>
+	<Span ID = 'DataArea'><Span/>
+	</p>
+	<p style='color:White' 'align='center'>
+	<label>BLANK</label>
+	</p>
+</body>
+</html>

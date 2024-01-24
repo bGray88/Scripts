@@ -1,0 +1,1 @@
+for %%A in (*) do "C:\Program Files\7-Zip\7z.exe" a -t7z -mx9 -m0=lzma2 -md=128m -mfb=128 -ms=on -mmt2 "%%~nA.7z" -xr!*.bat "%%A"

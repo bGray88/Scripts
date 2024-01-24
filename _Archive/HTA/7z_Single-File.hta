@@ -1,0 +1,104 @@
+
+<html>
+<head>
+<title>7z File</title>
+<HTA:APPLICATION
+ APPLICATIONNAME="7z_File"
+ ID="hta7zfile"
+ BORDER="thin"
+ MAXIMIZEBUTTON = "No"
+ SCROLL = "Yes"
+ SINGLEINSTANCE = "Yes"
+ VERSION="1.0"/>
+</head>
+
+<script language="VBScript">	
+	Sub Window_OnLoad
+		intWidth = "600"
+		intHeight = "300"
+		window.resizeTo intWidth, intHeight
+		intLeft = (screen.width - document.body.clientwidth)/2
+		intTop = (screen.availHeight - document.body.clientheight)/2 
+		window.moveTo intLeft, intTop
+	End Sub
+	
+	Sub SelectFile()
+		If Trim(file.Value) <> "" Then
+			Dim strFileValue
+			strFileValue = file.Value
+			DataArea.InnerHtml = strFileValue
+			file.Value = ""
+			Main(strFileValue)
+			Window.Close
+		End If
+	End Sub
+	
+	Sub Main(strFileSelected)
+		Const ShowWindow = 1, DontShowWindow = 0
+		Const WaitUntilFinished = True, DontWaitUntilFinished = False
+		Dim objShell : Set objShell = CreateObject("WScript.Shell")
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		Dim objFile
+		Dim strZipExe : strZipExe = "C:\Program Files\7-Zip\7zG.exe"
+		Dim strZipExt : strZipExt = ".7z"
+		Dim strZipFlags : strZipFlags = "a -t7z -m0=lzma2:d27 -mx9 -mmt8"
+		Dim strFullPath, strExtName
+		Dim intReturnCode
+		
+		Set objFile = objFSO.GetFile(strFileSelected)
+		strFullPath = Replace(strFileSelected, objFile.Name, "")
+		strExtName = objFSO.GetExtensionName(objFile)
+		
+		intReturnCode = objShell.Run (DoubleQuotes(strZipExe) & " " & _
+		strZipFlags & " " & _
+		DoubleQuotes(strFullPath & Replace(objFile.Name,"." & strExtName, "") & strZipExt) & " " & _
+		DoubleQuotes(strFullPath & objFile.Name), ShowWindow, WaitUntilFinished)
+		DeleteFile(strFullPath & objFile.Name)
+		
+		Set objFSO = Nothing
+		Set objShell = Nothing
+		Set objFile = Nothing
+	End Sub
+	
+	'******************************************************************************
+	' Purpose:	Delete specified file
+	'
+	' Inputs:	The full path to select file
+	'******************************************************************************
+	Sub DeleteFile(strFileName)
+		Dim objFSO
+		Set objFSO = CreateObject("Scripting.FileSystemObject")
+		objFSO.DeleteFile(strFileName)
+		Set objFSO = Nothing
+	End Sub
+
+	'******************************************************************************
+	' Purpose:	Surrounds string in escaped quote for literal string value
+	'
+	' Inputs:	The string to be encapsulated
+	'
+	' Returns:	The encapsulated string value
+	'******************************************************************************
+	Function DoubleQuotes(strIn)
+		DoubleQuotes = """" & strIn & """"
+	End Function
+
+</script>
+<body bgcolor="white">
+	<p>
+	<br>
+	<input type="file" name="file" size="50"/>
+	<br>
+	</p>
+	<p>
+	<input type="button" name="btnSelectFile" id="btnSelectFile" _
+		value=" SelectFile " onclick="SelectFile">
+	<input type="button" name="btnExit" id="btnExit" _
+		value="     Exit     " onclick="Self.Close()">
+	</p>
+	<p>
+	<Span ID = "DataArea" >File Select<Span/>
+	<br>
+	</p>
+</body>
+</html>

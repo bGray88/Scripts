@@ -1,0 +1,13 @@
+﻿Subtitle Musical Note
+♪
+♫
+
+Subtitle Character Formats
+UTF-8
+ISO-8859-1
+
+Language Codes
+jpn - Japanese
+fra - French
+eng - English
+chi - Chinese

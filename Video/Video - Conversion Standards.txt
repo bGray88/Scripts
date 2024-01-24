@@ -1,0 +1,16 @@
+ DVD & Blu ray Conversion Standards (Data Rate)
+|----------------------------------------------|
+
+ Movies
+|------|
+
+DVD     - 4000Kbps MAX
+Blu ray - 7000Kbps MAX
+
+ Television
+|----------|
+
+DVD (Animated)         - 2600Kbps MAX
+DVD (Live-Action)      - 3000Kbps MAX
+Blu ray (Animated)     - 4600Kbps MAX
+Blu ray (Live-Action)  - 5000Kbps MAX

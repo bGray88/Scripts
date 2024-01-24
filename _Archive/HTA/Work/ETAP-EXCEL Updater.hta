@@ -1,0 +1,580 @@
+
+<html>
+<head>
+<title>Device ETAP EXCEL Updater</title>
+<HTA:APPLICATION
+ APPLICATIONNAME="Device ETAP EXCEL Updater"
+ ID="deviceetapexcelupdater"
+ BORDER="thin"
+ MAXIMIZEBUTTON="No"
+ SCROLL="Yes"
+ SINGLEINSTANCE="Yes"
+ VERSION="1.0"/>
+</head>
+
+<script language="VBScript">
+	Dim intWindowWidth : intWindowWidth = "600"
+	Dim intWindowHeight : intWindowHeight = "300"
+	
+	Sub Window_OnLoad
+		intWidth = intWindowWidth
+		intHeight = intWindowHeight
+		Window.ResizeTo intWidth, intHeight
+		intLeft = (Screen.Width - Document.Body.ClientWidth)/2
+		intTop = (Screen.AvailHeight - Document.Body.ClientHeight)/2 
+		Window.MoveTo intLeft, intTop
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	
+	'
+	' Inputs:	
+	'
+	' Returns:	
+	'**********************************************************************************************
+	Sub EtapGetCompName
+		Const intAddNameCol = 22, intInvalidFileType = 1
+		Const ForReading = 1, ForWriting = 2, ForAppending = 8
+		Const blCreateFalse = False, blCreateTrue = True
+		Dim objFSO, objRoot, objNodeListName, objNodeListSerial
+		Dim objXmlFile, objXMLDoc, objTextFile, objWorksheet, objParseErr
+		Dim objExcelFile, objExcel, objWorkbook
+		Dim strXmlSelectedPath, strExcelName, strRAWLineRead, strETAPExcelFile
+		Dim strSerialNumber, strComputerName, strXmlFileSelected, strExcelFileSelected
+		Dim strXMLPath, strXMLName, strSerialTextName, strSerialTextFile
+		Dim strExcelFileExtension, strXmlFileExtension, strEtapExcelPath
+		Dim strSerialColumnName : strSerialColumnName = "Serial ID"
+		Dim intSerialLines, intElemCount, intCurrentCol
+		Dim intCurrentRow : intCurrentRow = 4
+		Dim colRowRange
+		Dim intCurrentTextLine : intCurrentTextLine = 0
+		
+		Set objFSO = CreateObject("Scripting.FileSystemObject")
+		
+		'******************************************************************************************
+		' Selecting the ETAP EXCEL file 
+		'******************************************************************************************
+		DataArea.InnerHtml = "Please Select the ETAP Excel file"
+		WaitSeconds 3
+		strExcelFileSelected = BrowseForFile("")
+		strExcelFileExtension = objFSO.GetExtensionName(strExcelFileSelected)
+		
+		If strExcelFileExtension <> "xls" And strExcelFileExtension <> "xlsx" And _ 
+				strExcelFileExtension <> "xlsm" Then
+			ErrHandling(intInvalidFileType)
+		End If
+		
+		'******************************************************************************************
+		' Selecting the XML device file 
+		'******************************************************************************************
+		DataArea.InnerHtml = "Please Select the XML device file"
+		WaitSeconds 3
+		strXmlFileSelected = BrowseForFile("")
+		strXmlFileExtension = objFSO.GetExtensionName(strXmlFileSelected)
+		
+		If strXmlFileExtension <> "xml" Then
+			ErrHandling(intInvalidFileType)	
+		End If
+		
+		Set objXmlFile = objFSO.GetFile(strXmlFileSelected)
+		
+		'******************************************************************************************
+		' Creating the Serial Number txt file 
+		'******************************************************************************************
+		strSerialTextName = "SerialNumber.txt"
+		strXMLPath = objXmlFile.ParentFolder & "\"
+		strXMLName = objXmlFile.Name
+		strSerialTextFile = strXMLPath & strSerialTextName
+		
+		'******************************************************************************************
+		' Reading from the device XML and recording the serial data to SerialText
+		'******************************************************************************************
+		Set objXMLDoc = CreateObject("Microsoft.XMLDOM") 
+		objXMLDoc.async = False
+		objXMLDoc.load(strXMLPath & strXMLName)
+		
+		Set objRoot = objXMLDoc.documentElement 
+		Set objParseErr = objXMLDoc.ParseError
+		If objParseErr.ErrorCode <> 0 Then
+			MsgBox "Error: Line " & objParseErr.Line & VbCrLf & _
+				objParseErr.Reason, 16, "Warning"
+			Window.Close
+			WaitSeconds 5
+		End If
+		Set objNodeListName = objRoot.getElementsByTagName("computer_name")
+		Set objNodeListSerial = objRoot.getElementsByTagName("serial_num")
+		
+		Set objTextFile = objFSO.OpenTextFile(strSerialTextFile, ForWriting, blCreateTrue)
+		
+		intElemCount = 0
+		For Each Elem In objNodeListSerial
+			strSerialNumber = objNodeListSerial.item(intElemCount).Text
+			strComputerName = objNodeListName.item(intElemCount).Text
+			
+			intElemCount = intElemCount + 1
+			HtmlProgress "Reading from " & strXMLName, intElemCount, objNodeListName.Length, _
+					intWindowWidth
+			objTextFile.Write(strSerialNumber & strComputerName & vbCrLf)
+		Next	
+		
+		objTextFile.Close
+		
+		'******************************************************************************************
+		' Reading from the SerialText and recording the relevant data to the ETAP report
+		'******************************************************************************************
+		Set objExcelFile = objFSO.GetFile(strExcelFileSelected)
+		
+		strEtapExcelPath = objExcelFile.ParentFolder & "\"
+		strExcelName = objExcelFile.Name
+		strETAPExcelFile = strEtapExcelPath & strExcelName
+		
+		intSerialLines = CountLinesText(strSerialTextFile)
+		
+		Set objTextFile = objFSO.OpenTextFile(strSerialTextFile, ForReading, blCreateFalse)
+		Set objExcel = CreateObject("Excel.Application")
+		Set objWorkbook = objExcel.Workbooks.Open(strETAPExcelFile)
+		Set objWorksheet = objExcel.Worksheets(2)
+		Set colRowRange = objWorksheet.Rows(3)
+		
+		intCurrentCol = MatchColumnValue(colRowRange, strSerialColumnName)
+		
+		Do While Not objTextFile.AtEndOfStream
+			strRAWLineRead = objTextFile.ReadLine
+			strSerialNumber = (Left(strRAWLineRead, 7))
+			strComputerName = (Replace(strRAWLineRead, strSerialNumber, ""))
+			intCurrentRow = 5
+			
+			intCurrentTextLine = intCurrentTextLine + 1
+			HtmlProgress "Writing to " & strExcelName, intCurrentTextLine, intSerialLines, _
+					intWindowWidth
+			
+			Do Until objExcel.Cells(intCurrentRow, intCurrentCol).Value = strSerialNumber Or _
+					objExcel.Cells(intCurrentRow, intCurrentCol).Value = ""
+				intCurrentRow = intCurrentRow + 1
+			Loop
+			
+			If objExcel.Cells(intCurrentRow, intCurrentCol).Value = strSerialNumber Then
+				objExcel.Visible = False
+				objExcel.Cells(intCurrentRow, intAddNameCol).Value = strComputerName
+			Else
+				objExcel.Visible = False
+				objExcel.Cells(intCurrentRow, intAddNameCol).Value = strComputerName
+				objExcel.Cells(intCurrentRow, intCurrentCol).Value = strSerialNumber
+			End If
+		Loop
+
+		objExcel.ActiveWorkbook.Save
+		objExcel.ActiveWorkbook.Close
+
+		Set objTextFile = objFSO.OpenTextFile(strSerialTextFile, ForWriting, blCreateTrue)
+		
+		WaitSeconds 3
+		Window.Close()
+		
+		'******************************************************************************************
+		' Clean-up
+		'******************************************************************************************
+		Set objXmlFile = Nothing
+		Set objExcelFile = Nothing
+		Set objFSO = Nothing
+		Set objXMLDoc = Nothing
+		Set objRoot = Nothing
+		Set objNodeListName = Nothing
+		Set objNodeListSerial = Nothing
+		Set objTextFile = Nothing
+		Set objExcel = Nothing
+		Set objWorkbook = Nothing
+		Set objWorksheet = Nothing
+		Set colRowRange = Nothing
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	
+	'
+	' Inputs:	
+	'
+	' Returns:	
+	'**********************************************************************************************
+	Sub GetIpadNameSerial
+		Const intInvalidFileType = 1
+		Const ForReading = 1, ForWriting = 2, ForAppending = 8
+		Const blCreateFalse = False, blCreateTrue = True
+		Dim intCurrentRow, intCurrentBorrRow, intSerialLines
+		Dim strSerialTextFile, strEtapExcelFile, strBorrExcelFile, strIpadExcelFile
+		Dim strSelectedPath,strSerialTextName
+		Dim  strEtapFileExtension, strIpadFileExtension, strBorrFileExtension
+		Dim objFSO, objTextFile, objIpadExcel, objEtapExcel, objBorrExcel
+		Dim objIpadWorkbook, objBorrWorkbook, objEtapWorkbook, objActiveWorkBook, objActiveWorksheet
+		Dim intIpadExcelLength : intIpadExcelLength = 0
+		Dim intCurrentTextLine : intCurrentTextLine = 0
+
+		Const intStartRow = 3, intSerialCol = 10, intNameCol = 4
+		Const intETAPSerialCol = 6, intETAPCustCol = 5,  intETAPGroupCol = 4
+		Const intBorrNameCol = 3, intBorrTeachCol = 4, intSerialLength = 12, intNameLength = 7
+		
+		Set objFSO = CreateObject("Scripting.FileSystemObject")
+		
+		'******************************************************************************************
+		' Selecting the ETAP EXCEL file 
+		'******************************************************************************************
+		DataArea.InnerHtml = "Please Select the ETAP Excel file"
+		WaitSeconds 1
+		strEtapExcelFile = BrowseForFile("")
+		strEtapFileExtension = objFSO.GetExtensionName(strEtapExcelFile)
+		
+		If strEtapFileExtension <> "xls" And strEtapFileExtension <> "xlsx" And _ 
+				strEtapFileExtension <> "xlsm" Then
+			ErrHandling(intInvalidFileType)
+		End If
+		
+		Set objFile = objFSO.GetFile(strEtapExcelFile)
+		
+		strSelectedPath = objFile.ParentFolder & "\"
+		
+		'******************************************************************************************
+		' Selecting the iPad EXCEL file 
+		'******************************************************************************************
+		DataArea.InnerHtml = "Please Select the iPad Excel file"
+		WaitSeconds 1
+		strIpadExcelFile = BrowseForFile(strSelectedPath)
+		strIpadFileExtension = objFSO.GetExtensionName(strIpadExcelFile)
+		
+		If strIpadFileExtension <> "xls" And strIpadFileExtension <> "xlsx" And _ 
+				strIpadFileExtension <> "xlsm" Then
+			ErrHandling(intInvalidFileType)
+		End If
+		
+		'******************************************************************************************
+		' Selecting the LS2 Borrower Report EXCEL file 
+		'******************************************************************************************
+		DataArea.InnerHtml = "Please select the Borrower EXCEL file to pull student data from"
+		WaitSeconds 1
+		strBorrExcelFile = BrowseForFile(strSelectedPath)
+		strBorrFileExtension = objFSO.GetExtensionName(strBorrExcelFile)
+		
+		If strBorrFileExtension <> "xls" And strBorrFileExtension <> "xlsx" And _ 
+				strBorrFileExtension <> "xlsm" Then
+			ErrHandling(intInvalidFileType)
+		End If
+		
+		'******************************************************************************************
+		' Creating the Serial Number txt file 
+		'******************************************************************************************
+		strSerialTextName = "SerialNumber.txt"
+		strSerialTextFile = strSelectedPath & strSerialTextName
+		Set objTextFile = objFSO.OpenTextFile(strSerialTextFile, ForWriting, blCreateTrue)
+		Set objIpadExcel = CreateObject("Excel.Application")
+		Set objIpadWorkbook = objIpadExcel.Workbooks.Open(strIpadExcelFile)
+		Set objActiveWorkBook = objIpadExcel.ActiveWorkbook
+		Set objActiveWorksheet = objActiveWorkBook.Worksheets("Sheet2")
+		
+		'******************************************************************************************
+		' Reading from the iPad EXCEL and recording the serial data to SerialText
+		'******************************************************************************************
+		intCurrentRow = intStartRow
+		Do Until objActiveWorksheet.Cells(intCurrentRow, intSerialCol).Value = ""
+			intIpadExcelLength = intIpadExcelLength + 1
+			intCurrentRow = intCurrentRow + 1
+		Loop
+		intCurrentRow = intStartRow
+		Do Until objActiveWorksheet.Cells(intCurrentRow, intSerialCol).Value = ""
+			intCurrentRow = intCurrentRow + 1
+			HtmlProgress "Reading from " & objFSO.GetFileName(strIpadExcelFile), _
+				intCurrentRow - intStartRow, intIpadExcelLength, intWindowWidth
+			objTextFile.Write ((objActiveWorksheet.Cells(intCurrentRow, intSerialCol).Value) & _
+				Left((objActiveWorksheet.Cells(intCurrentRow, intNameCol).Value), intNameLength) & vbCrLf)
+		Loop
+		
+		objIpadWorkbook.Close
+		objTextFile.Close
+		
+		'******************************************************************************************
+		' Reading from the SerialText and the BorrExcel, and recording the relevant data
+		' to the ETAP report
+		'******************************************************************************************
+		intSerialLines = CountLinesText(strSerialTextFile)
+		
+		Set objTextFile = objFSO.OpenTextFile(strSerialTextFile, ForReading, blCreateFalse)
+		Set objEtapExcel = CreateObject("Excel.Application")
+		Set objEtapWorkbook = objEtapExcel.Workbooks.Open(strEtapExcelFile)
+		Set objBorrExcel = CreateObject("Excel.Application")
+		Set objBorrWorkbook = objBorrExcel.Workbooks.Open(strBorrExcelFile)
+		
+		Do While Not objTextFile.AtEndOfStream
+			intCurrentRow = intStartRow
+			intCurrentBorrRow = intStartRow
+			strRAWLineRead = objTextFile.ReadLine
+			strSerialNumber = (Left(strRAWLineRead, intSerialLength))
+			strUserName = (Replace(strRAWLineRead, strSerialNumber, ""))
+			
+			intCurrentTextLine = intCurrentTextLine + 1
+			HtmlProgress "Writing to " & objFSO.GetFileName(strEtapExcelFile), _
+				intCurrentTextLine, intSerialLines, intWindowWidth
+			
+			Do Until objEtapExcel.Cells(intCurrentRow, intETAPSerialCol).Value = _ 
+				strSerialNumber Or objEtapExcel.Cells(intCurrentRow, intETAPSerialCol).Value = ""
+				intCurrentRow = intCurrentRow + 1
+			Loop
+			
+			If objEtapExcel.Cells(intCurrentRow, intETAPSerialCol).Value = strSerialNumber Then
+				Do Until objBorrExcel.Cells(intCurrentBorrRow, intBorrNameCol).Value = _ 
+					strUserName Or objBorrExcel.Cells(intCurrentBorrRow, intBorrNameCol).Value = ""
+					intCurrentBorrRow = intCurrentBorrRow + 1
+				Loop
+				objEtapExcel.Visible = False
+				If strUserName <> "" Then
+					objEtapExcel.Cells(intCurrentRow, intETAPCustCol).Value = Trim(strUserName)
+				End If
+				If Trim(Replace(objBorrExcel.Cells(intCurrentBorrRow, intBorrTeachCol).Value, "RP: ", "")) <> "" Then
+					objEtapExcel.Cells(intCurrentRow, intETAPGroupCol).Value = _ 
+						Replace(objBorrExcel.Cells(intCurrentBorrRow, intBorrTeachCol).Value, "RP: ", "")
+				End If
+			Else
+				objEtapExcel.Visible = False
+				objEtapExcel.Cells(intCurrentRow, intETAPCustCol).Value = strUserName
+				objEtapExcel.Cells(intCurrentRow, intETAPSerialCol).Value = strSerialNumber
+			End If
+		Loop
+		
+		Set objTextFile = objFSO.OpenTextFile(strSerialTextFile, ForWriting, blCreateTrue)
+		
+		objEtapWorkbook.Save
+		objEtapWorkbook.Close
+		objBorrWorkbook.Close
+		objTextFile.Close
+		
+		WaitSeconds 3
+		Window.Close
+		
+		'******************************************************************************************
+		' Clean-up
+		'******************************************************************************************
+		Set objFSO = Nothing
+		Set objTextFile = Nothing
+		Set objIpadExcel = Nothing
+		Set objEtapExcel = Nothing
+		Set objBorrExcel = Nothing
+		Set objIpadWorkbook = Nothing
+		Set objBorrWorkbook = Nothing
+		Set objEtapWorkbook = Nothing
+		Set objActiveWorkBook = Nothing
+		Set objActiveWorksheet = Nothing
+	End Sub
+	
+	'******************************************************************************
+	' Purpose:	Browse for file dialogue box
+	'
+	' Inputs:	The starting directory for the dialogue box
+	'
+	' Returns:	A string that consists of the full path to file selected
+	'******************************************************************************
+	Function BrowseForFile(strInitialDir)
+		Dim objWMIService : Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
+		Dim objDialog
+		Dim colItems : Set colItems = _
+			objWMIService.ExecQuery("Select * from Win32_OperatingSystem")
+		Dim intWinVersion
+		Dim strFilePath
+		Dim strMshta : strMshta = "mshta.exe ""about:" & "<" & "input type=file id=FILE>" _
+             & "<" & "script>FILE.click();new ActiveXObject('Scripting.FileSystemObject')" _
+             & ".GetStandardStream(1).WriteLine(FILE.value);close();resizeTo(0,0);" & "<" & "/script>"""
+				
+		For Each objItem in colItems
+			intWinVersion = CInt(Left(objItem.version, 1))
+		Next
+		Set objWMIService = Nothing
+		Set colItems = Nothing
+
+		If (intWinVersion <= 5) Then
+			' Running XP and can use the original mechanism
+			Set objDialog = CreateObject("UserAccounts.CommonDialog")
+			objDialog.InitialDir = strInitialDir
+			objDialog.Filter = "All Files|*.*"
+			Do While True
+				If objDialog.ShowOpen = True Then
+					BrowseForFile = objDialog.FileName
+					Exit Do
+				ElseIf objDialog.ShowOpen = 0 Then
+					Set objDialog = Nothing
+					Window.Close()
+				Else
+					ErrHandling(intInvalidFileType)
+					Set objDialog = Nothing
+				End If
+			Loop
+			Set objDialog = Nothing
+		Else
+			' Running Windows 7 or later
+			Set objShell = CreateObject("WScript.Shell")
+			Set objFilePath = objShell.Exec(strMshta)
+			strFilePath = Replace(objFilePath.StdOut.ReadAll, VbCrLf, "")
+			' Cancel was pressed
+			If strFilePath = "" Then
+				Set objShell = Nothing
+				Set objFilePath = Nothing
+			Else
+				BrowseForFile = strFilePath
+			End If
+			Set objShell = Nothing
+			Set objFilePath = Nothing
+		End If
+	End Function
+	
+	'******************************************************************************
+	' Purpose:	Counts the lines before EOF in text file
+	'
+	' Inputs:	The full path including file name of text file
+	'
+	' Returns:	Integer value of lines counted
+	'******************************************************************************
+	Function CountLinesText(strTextPath)
+		Const ForReading = 1, ForWriting = 2, ForAppending = 8
+		Const blCreateFalse = False, blCreateTrue = True
+		Dim objFSO, ObjTextFile
+		Dim intLineCount : intLineCount = 0
+		Set objFSO = CreateObject("Scripting.FileSystemObject")
+		If objFSO.FileExists(strTextPath) Then
+			Set objTextFile = objFSO.OpenTextFile(strTextPath, ForReading, blCreateFalse)
+			
+			Do While Not objTextFile.AtEndOfStream
+				objTextFile.ReadLine
+				intLineCount = intLineCount + 1
+			Loop
+			objTextFile.Close()
+			Set objTextFile = Nothing
+		End If
+		CountLinesText = intLineCount
+		Set objFSO = Nothing
+	End Function
+	
+	'******************************************************************************
+	' Purpose:	Checks rounding eligibility of number to the next whole number
+	'
+	' Inputs:	A number value
+	'
+	' Returns:	An integer value
+	'******************************************************************************
+	Function DblRoundUp(intDouble)
+		If intDouble = Round(intDouble) Then
+			DblRoundUp = intDouble
+		Else
+			DblRoundUp = Round(intDouble + 0.5)
+		End If
+	End Function
+	
+	'******************************************************************************
+	' Purpose:	To manually manage errors
+	'
+	' Inputs:	An integer value to indicate error
+	'******************************************************************************
+	Sub ErrHandling(intErrNumber)
+		Select Case intErrNumber
+			Case 1
+				MsgBox("The file selected is not of the required type, quitting")
+				Window.Close
+				WaitSeconds 5
+			Case Else
+				Window.Close
+				WaitSeconds 5
+		End Select
+	End Sub
+	
+	'******************************************************************************
+	' Purpose:	Adds a progress bar to any task that can be measured by 
+	' 			integer variables
+	'
+	' Inputs:	Current task name
+	'
+	' Optional:	If Round is used instead of custom function DblRoundUp 100
+	'			percent may be unattainable in some circumstances
+	'******************************************************************************
+	Sub HtmlProgress(strCurrentTask, intCurrentCount, intTotalCount, intWindowWidth)
+		Dim strTaskMessage, strProgressNum, strProgressBar
+		Dim intTotalPercent : intTotalPercent = 100
+		Dim intCurrentProgress, intBarProgress
+		Dim intBarSize : intBarSize = intWindowWidth * .10
+		Dim dblProgressModifier : dblProgressModifier = 2.16 - intBarSize / 10 * .07
+		If intTotalCount > 0 Then
+			intCurrentProgress = DblRoundUp(intCurrentCount / intTotalCount * intTotalPercent)
+			'intCurrentProgress = Round(intCurrentCount / intTotalCount * intTotalPercent)
+			intBarProgress = DblRoundUp(intCurrentCount / intTotalCount * intBarSize) * dblProgressModifier
+			'intBarProgress = Round(intCurrentCount / intTotalCount * intBarSize) * dblProgressModifier
+			strTaskMessage = "Completing requested task - " & strCurrentTask & "...<BR>" & _
+				"This might take several minutes to complete.<BR>" & _
+				"<BR>"
+			strProgressNum = "Current Status " & intCurrentProgress & "% Complete<BR>"
+			strProgressBar = "<" & "input align='left' name='currentProgress' " & _
+				"size=" & intBarSize & " type='text' " & _
+				"value=|" & String(intBarProgress, "|") & " disabled='disabled'>"
+			DataArea.InnerHTML = strTaskMessage & strProgressNum & strProgressBar
+			If intCurrentCount = intTotalCount Then
+				DataArea.InnerHTML = strTaskMessage & _
+				"Current Status " & intTotalPercent & "% Complete<BR>" & _
+				strProgressBar & "<BR>" & _
+				"Task Complete"
+			End If
+			WaitSeconds(0)
+		End If
+	End Sub
+	
+	'******************************************************************************
+	' Purpose:	Finds the cell with the matching string value
+	'
+	' Inputs:	Range of cells to be searched
+	'
+	' Returns:	The column number of the cell found to contain match
+	'******************************************************************************
+	Function MatchColumnValue(colRange, strMatch)
+		If TypeName(colRange) <> "Nothing" Then
+			If colRange.Count > 0 Then
+				For Each Cell In colRange.Cells
+					If StrComp(Cell.Value, strMatch, 1) = 0 Then
+						MatchColumnValue = Cell.Column
+					End If
+				Next
+			End If
+		End If
+	End Function
+
+	'******************************************************************************
+	' Purpose:	HTA or WScript sleep function
+	'
+	' Inputs:	The time to sleep in seconds
+	'******************************************************************************
+	Sub WaitSeconds(intSeconds)
+		Const HideWindow = 0, ShowWindow = 1
+		Const WaitForCompletion = True, SkipPastCompletion = False
+		Dim strPingCommand
+		Dim objWShell
+		Dim intTimeWaitSeconds : intTimeWaitSeconds = intSeconds
+		
+		Set objWShell = CreateObject("WScript.Shell")
+		
+		strPingCommand = "cmd /c ping 1.1.1.1 -n 1 -w " & intTimeWaitSeconds
+		objWShell.Run strPingCommand, HideWindow, WaitForCompletion
+		
+		Set objWShell = Nothing
+	End Sub
+	
+</script>
+<body bgcolor="white">
+	<p align='center'>
+	<label>Choose an option</label>
+	</p>
+	<p align='center' >
+	<input type="button" name="btncompnames" id="btncompnames" _
+		value="Add ComputerNames" onclick="EtapGetCompName">
+	<input type="button" name="btnipaddata" id="btnipaddata" _
+		value="    Add iPad Data    " onclick="GetIpadNameSerial">
+	</p>
+	<p align='center'>
+	<Span ID = "DataArea"><Span/>
+	</p>
+	<p>
+	<input type="button" name="btnExit" id="btnExit" _
+		value="          Exit          " _
+		style="position: absolute; left: 235; top: 235;"
+		onclick="Window.Close()">
+	</p>
+</body>
+</html>

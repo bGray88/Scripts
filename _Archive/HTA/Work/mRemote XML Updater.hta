@@ -1,0 +1,356 @@
+
+<html>
+<head>
+<title>mRemote XML Updater</title>
+<HTA:APPLICATION
+ APPLICATIONNAME="mRemote XML Updater"
+ ID="mremotexmlpdater"
+ BORDER="thin"
+ MAXIMIZEBUTTON="No"
+ SCROLL="Yes"
+ SINGLEINSTANCE="Yes"
+ VERSION="1.0"/>
+</head>
+
+<script language="VBScript">
+	Dim blIsName : blIsName = True
+	Dim blIsDomain : blIsDomain = True
+	Dim blIsPass : blIsPass = True
+	
+	Sub Window_OnLoad
+		intWidth = (Screen.Width - Document.Body.ClientWidth)/.7
+		intHeight = (Screen.AvailHeight - Document.Body.ClientHeight)/.7
+		Window.ResizeTo intWidth, intHeight
+		intLeft = (Screen.Width - Document.Body.ClientWidth)/2
+		intTop = (Screen.AvailHeight - Document.Body.ClientHeight)/2
+		Window.MoveTo intLeft, intTop
+	End Sub
+	
+	'**********************************************************************************************
+	' Purpose:	
+	'
+	' Inputs:	
+	'
+	' Returns:	
+	'**********************************************************************************************
+	Sub SetNameAndPass
+		Const intInvalidFileType = 1, intEmptyFolder = 2, intEmptyInput = 3, intMissingFiles = 4
+		Const intNameInput = 5, intDomainInput = 6, intPassInput = 7
+		Dim objFSO, objFolder, objXMLDoc, objWShell, objPing
+		Dim colFiles
+		Dim objParseErr
+		Dim strXMLPathSelected : strXMLPathSelected = ""
+		Dim strXmlFileExtension, strPingCommand, strPingOutput, XMLFile
+		Dim strXMLNames : strXMLNames = Array("Central mRemoteNG", "North mRemoteNG", "South mRemoteNG")
+		Dim strXMLFiles : strXMLFiles = Array()
+		Dim intArrSize : intArrSize = 0
+		
+		Set objFSO = CreateObject("Scripting.FileSystemObject")
+		Set objWShell = CreateObject("WScript.Shell")
+		
+		If document.getElementById("iptname").value = "" Then
+			ErrHandling(intNameInput)
+		End If
+		If document.getElementById("iptdomain").value = "" Then
+			ErrHandling(intDomainInput)
+		End If
+		If document.getElementById("iptpass").value = "" Then
+			ErrHandling(intPassInput)
+		End If
+		
+		'******************************************************************************************
+		' Selecting the XML device file directory
+		'******************************************************************************************
+		DataArea.InnerHtml = "Please Select the XML device directory"
+		WaitSeconds 3
+		strXMLPathSelected = BrowseForFolder("Select the directory that contains the XML's", "")
+		
+		If strXMLPathSelected = "" Then
+			Exit Sub
+		End If
+		
+		If FolderEmpty(strXMLPathSelected) Then
+			ErrHandling(intEmptyFolder)
+		End If
+		
+		Set objFolder = objFSO.GetFolder(strXMLPathSelected)
+		Set colFiles = objFolder.Files
+		
+		For Each File In colFiles
+			strXmlFileExtension = objFSO.GetExtensionName(File)
+			If strXmlFileExtension = "xml" Then
+				XMLFile = File.Name
+				XMLFile = Replace(XMLFile, ".xml", "")
+				For Each XMLName In strXMLNames
+					If StrComp(XMLFile, XMLName, vbTextCompare) = 0 Then
+						Redim Preserve strXMLFiles(intArrSize)
+						strXMLFiles(intArrSize) = strXMLPathSelected & "\" & XMLFile & ".xml"
+						intArrSize = intArrSize + 1
+					End If
+				Next
+			End If
+		Next
+		If UBound(strXMLFiles) + 1 <= 0 Then
+			ErrHandling(intMissingFiles)
+		End If
+		
+		'******************************************************************************************
+		' Writing to the device XML
+		'******************************************************************************************
+		For Each XMLFile In strXMLFiles
+			Set objXMLDoc = CreateObject("Microsoft.XMLDOM") 
+			objXMLDoc.async = False
+			objXMLDoc.load(XMLFile)
+			 
+			Set objParseErr = objXMLDoc.ParseError
+			
+			If objParseErr.ErrorCode <> 0 Then
+				MsgBox "Error: Line " & objParseErr.Line & VbCrLf & _
+					objParseErr.Reason, 16, "Warning"
+				Window.Close
+				WaitSeconds 5
+			End If
+			
+			For Each NodeName In objXMLDoc.SelectNodes("//Node")
+				NodeType = NodeName.getAttribute("Type")
+				NodeServer = NodeName.getAttribute("Hostname")
+				
+				If StrComp(NodeType, "Connection", vbTextCompare) = 0 Then
+					If NodeServer = "" Then
+						NodeServer = NodeName.getAttribute("Name")
+						MsgBox(NodeServer & " Hostname is blank, please update Hostname")
+					Else
+						strPingCommand = "ping " & NodeServer & " -n 1"
+						set objPing = objWShell.Exec(strPingCommand)
+						strPingOutput = objPing.StdOut.ReadAll
+						If InStr(LCase(strPingOutput), "reply") <= 0 Then
+							MsgBox(NodeServer & " is not a valid server name, or the device is not responding")
+						End If
+						If blIsName Then
+							NodeName.Attributes.getNamedItem("Username").Text = document.getElementById("iptname").value
+						End If
+						If blIsDomain Then
+							NodeName.Attributes.getNamedItem("Domain").Text = document.getElementById("iptdomain").value
+						End If
+						If blIsPass Then
+							NodeName.Attributes.getNamedItem("Password").Text = document.getElementById("iptpass").value
+						End If
+					End If
+				End If
+			Next
+			If ((blIsName = True) Or (blIsDomain = True) Or (blIsPass = True)) Then
+				objXMLDoc.Save Replace(XMLFile, ".xml", "") & " (Updated).xml"
+			End If
+			
+		Next
+		
+		'******************************************************************************************
+		' Clean-up
+		'******************************************************************************************
+		Set objFSO = Nothing
+		Set objFolder = Nothing
+		Set colFiles = Nothing
+		Set objXMLDoc = Nothing
+		Set colFiles = Nothing
+		Set objParseErr = Nothing
+		Set objWShell = Nothing
+		set objPing = Nothing
+		Window.Close
+		WaitSeconds 5
+	End Sub
+	
+	'******************************************************************************
+	' Purpose:	Displays a dialogue box prompting for folder selection
+	'
+	' Inputs:	Title bar header text, starting directory for dialogue box
+	'
+	' Returns:	A string object of the full path to selected folder
+	'******************************************************************************
+	Function BrowseForFolder(strTitleBar, strStartDir)
+		Const WinHandle = 0, Options = 0
+		Dim objShell, objItem
+		
+		Set objShell = CreateObject("Shell.Application")
+		Set objItem = objShell.BrowseForFolder(WinHandle, strTitleBar, _
+			Options, strStartDir)
+		Set objShell = Nothing
+		
+		If Not objItem Is Nothing Then
+			If IsObject(objItem) Then
+				BrowseForFolder = objItem.Self.Path
+			End If
+		Else
+			BrowseForFolder = ""
+		End If
+		
+		Set objItem = Nothing
+		Set objShell = Nothing
+	End Function
+
+	'******************************************************************************
+	' Purpose:	Checks rounding eligibility of number to the next whole number
+	'
+	' Inputs:	A number value
+	'
+	' Returns:	An integer value
+	'******************************************************************************
+	Function DblRoundUp(intDouble)
+		If intDouble = Round(intDouble) Then
+			DblRoundUp = intDouble
+		Else
+			DblRoundUp = Round(intDouble + 0.5)
+		End If
+	End Function
+	
+	'******************************************************************************
+	' Purpose:	To manually manage errors
+	'
+	' Inputs:	An integer value to indicate error
+	'******************************************************************************
+	Sub ErrHandling(intErrNumber)
+		Select Case intErrNumber
+			Case 1
+				MsgBox("The file selected is not of the required type, quitting")
+				Window.Close
+				WaitSeconds 5
+			Case 2
+				MsgBox("The folder selected is empty, quitting")
+				Window.Close
+				WaitSeconds 5
+			Case 3
+				MsgBox("The input cannot be empty, quitting")
+				Window.Close
+				WaitSeconds 5
+			Case 4
+				MsgBox("The directory has no files to be processed, quitting")
+				Window.Close
+				WaitSeconds 5
+			Case 5
+				blIsName = False
+			Case 6
+				blIsDomain = False
+			Case 7
+				blIsPass = False
+			Case Else
+				MsgBox("An unknown error has occurred, quitting")
+				Window.Close
+				WaitSeconds 5
+		End Select
+	End Sub
+	
+	'******************************************************************************
+	' Purpose:	Determines whether strFileName is an empty folder
+	'
+	' Inputs:	The full path to a folder
+	'
+	' Returns:	Boolean value of determined folder contents
+	'******************************************************************************
+	Function FolderEmpty(strFolderPath)
+		Dim objFSO, objFolder
+		Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+		If objFSO.FolderExists(strFolderPath) Then
+			Set objFolder = objFSO.GetFolder(strFolderPath)
+			If objFolder.Files.Count = 0 And objFolder.SubFolders.Count = 0 Then
+				FolderEmpty = True
+			Else
+				FolderEmpty = False
+			End If
+		End If
+		Set objFSO = Nothing
+		Set objFolder = Nothing
+	End Function
+	
+	'******************************************************************************
+	' Purpose:	Adds a progress bar to any task that can be measured by 
+	' 			integer variables
+	'
+	' Inputs:	Current task name
+	'
+	' Optional:	If Round is used instead of custom function DblRoundUp 100
+	'			percent may be unattainable in some circumstances
+	'******************************************************************************
+	Sub HtmlProgress(strCurrentTask, intCurrentCount, intTotalCount, intWindowWidth)
+		Dim strTaskMessage, strProgressNum, strProgressBar
+		Dim intTotalPercent : intTotalPercent = 100
+		Dim intCurrentProgress, intBarProgress
+		Dim intBarSize : intBarSize = intWindowWidth * .10
+		Dim dblProgressModifier : dblProgressModifier = 2.16 - intBarSize / 10 * .07
+		If intTotalCount > 0 Then
+			intCurrentProgress = DblRoundUp(intCurrentCount / intTotalCount * intTotalPercent)
+			'intCurrentProgress = Round(intCurrentCount / intTotalCount * intTotalPercent)
+			intBarProgress = DblRoundUp(intCurrentCount / intTotalCount * intBarSize) * dblProgressModifier
+			'intBarProgress = Round(intCurrentCount / intTotalCount * intBarSize) * dblProgressModifier
+			strTaskMessage = "Completing requested task - " & strCurrentTask & "...<BR>" & _
+				"This might take several minutes to complete.<BR>" & _
+				"<BR>"
+			strProgressNum = "Current Status " & intCurrentProgress & "% Complete<BR>"
+			strProgressBar = "<" & "input align='left' name='currentProgress' " & _
+				"size=" & intBarSize & " type='text' " & _
+				"value=|" & String(intBarProgress, "|") & " disabled='disabled'>"
+			DataArea.InnerHTML = strTaskMessage & strProgressNum & strProgressBar
+			If intCurrentCount = intTotalCount Then
+				DataArea.InnerHTML = strTaskMessage & _
+				"Current Status " & intTotalPercent & "% Complete<BR>" & _
+				strProgressBar & "<BR>" & _
+				"Task Complete"
+			End If
+			WaitSeconds(0)
+		End If
+	End Sub
+	
+	'******************************************************************************
+	' Purpose:	HTA or WScript sleep function
+	'
+	' Inputs:	The time to sleep in seconds
+	'******************************************************************************
+	Sub WaitSeconds(intSeconds)
+		Const HideWindow = 0, ShowWindow = 1
+		Const WaitForCompletion = True, SkipPastCompletion = False
+		Dim strPingCommand
+		Dim objWShell
+		Dim intTimeWaitSeconds : intTimeWaitSeconds = intSeconds
+		
+		Set objWShell = CreateObject("WScript.Shell")
+		
+		strPingCommand = "cmd /c ping 1.1.1.1 -n 1 -w " & intTimeWaitSeconds
+		objWShell.Run strPingCommand, HideWindow, WaitForCompletion
+		
+		Set objWShell = Nothing
+	End Sub
+	
+</script>
+<body bgcolor='white'>
+	<p style='color:White' 'align='center'>
+	<label>BLANK</label>
+	</p>
+	<p align='center'>
+	<label>Please Enter Info To Be Inserted</label>
+	</p>
+	<p align='center'>
+	<label>Username</label>
+	<input type='text' name='iptname' size='30'>
+	</p>
+	<p align='center'>
+	<label>Domain  </label>
+	<input type='text' name='iptdomain' size='30'>
+	</p>
+	<p align='center'>
+	<label>Password</label>
+	<input type='password' name='iptpass' size='30'>
+	</p>
+	<p align='center' >
+	<input type='button' name='btnnamepass' id='btnnamepass' _
+		value='       Process       ' onclick='SetNameAndPass'>
+	<input type='button' name='btnExit' id='btnExit' _
+		value='       Exit       ' _
+		onclick='Window.Close()'>
+	</p>
+	<p align='center'>
+	<Span ID = 'DataArea'><Span/>
+	</p>
+	<p style='color:White' 'align='center'>
+	<label>BLANK</label>
+	</p>
+</body>
+</html>

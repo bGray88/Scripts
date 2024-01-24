@@ -1,0 +1,139 @@
+
+<html>
+<head>
+<title>UNECM</title>
+<HTA:APPLICATION
+ APPLICATIONNAME="UNECM_HTA"
+ ID="htaunecm"
+ BORDER="thin"
+ MAXIMIZEBUTTON = "No"
+ SCROLL = "Yes"
+ SINGLEINSTANCE = "Yes"
+ VERSION="1.0"/>
+</head>
+
+<script language="VBScript">	
+	Sub Window_OnLoad
+		intWidth = "600"
+		intHeight = "300"
+		window.resizeTo intWidth, intHeight
+		intLeft = (screen.width - document.body.clientwidth)/2
+		intTop = (screen.availHeight - document.body.clientheight)/2 
+		window.moveTo intLeft, intTop
+	End Sub
+	
+	Sub SelectFile()
+		If Trim(file.Value) <> "" Then
+			Dim strFileValue
+			strFileValue = file.Value
+			DataArea.InnerHtml = strFileValue
+			file.Value = ""
+			Main(strFileValue)
+			Window.Close
+		End If
+	End Sub
+	
+	Sub Main(strFileSelected)
+		Const ShowWindow = 1, DontShowWindow = 0
+		Const WaitUntilFinished = True, DontWaitUntilFinished = False
+		Dim objFSO : Set objFSO = CreateObject("Scripting.FileSystemObject")
+		Dim objShell : Set objShell = CreateObject("WScript.Shell")
+		Dim objFile
+		Dim strSelectedName, strSelectedPath, strReducedPath
+		Dim strParentFolderName, strFullPath
+		Dim strCreatedName : strCreatedName = "disc.cdi"
+		Dim strProgramName : strProgramName = "unecm.exe"
+		Dim strUnecmPath : strUnecmPath = "C:\Program Files (x86)\ecm tools\"
+		
+		strSelectedPath = GetFileFolderName(strFileSelected)
+		strSelectedPath = Left(strSelectedPath, Len(strSelectedPath) - 1)
+		strSelectedName = Replace(strFileSelected, strSelectedPath, "")
+		strSelectedName = Replace(strSelectedName, "\", "")
+		
+		strReducedPath = GetFileFolderName(strSelectedPath)
+		strParentFolderName = Replace(strFileSelected, strReducedPath, "")
+		strParentFolderName = Replace(strParentFolderName, "\", "")
+		strParentFolderName = Replace(strParentFolderName, strSelectedName, "")
+		strFullPath = strSelectedPath & "\"
+		
+		objFSO.CopyFile strUnecmPath & strProgramName, _
+			strFullPath & strProgramName
+		objShell.Run DoubleQuotes(strFullPath & strProgramName) & " " & _
+			DoubleQuotes(strFullPath & strSelectedName) & " " & _
+			DoubleQuotes(strFullPath & strCreatedName), ShowWindow, _
+			WaitUntilFinished
+		Set objFile = objFSO.GetFile(strFullPath & strSelectedName)
+		objFSO.MoveFile strFullPath & strCreatedName, _
+			strFullPath & strParentFolderName & ".cdi"
+		DeleteFile(strFullPath & strSelectedName)
+		DeleteFile(strFullPath & strProgramName)
+		Set objFSO = Nothing
+		Set objFile = Nothing
+		Set objShell = Nothing
+	End Sub
+		
+	'******************************************************************************
+	' Purpose:	Delete specified file
+	'
+	' Inputs:	The full path to select file
+	'******************************************************************************
+	Sub DeleteFile(strFileName)
+		Dim objFSO
+		Set objFSO = CreateObject("Scripting.FileSystemObject")
+		objFSO.DeleteFile(strFileName)
+		Set objFSO = Nothing
+	End Sub
+
+	'******************************************************************************
+	' Purpose:	Surrounds string in escaped quote for literal string value
+	'
+	' Inputs:	The string to be encapsulated
+	'
+	' Returns:	The encapsulated string value
+	'******************************************************************************
+	Function DoubleQuotes(strIn)
+		DoubleQuotes = """" & strIn & """"
+	End Function
+
+	'******************************************************************************
+	' Purpose:	
+	'
+	' Inputs:	
+	'
+	' Returns:	
+	'******************************************************************************
+	Function GetFileFolderName(strFilePath)
+		Dim intFirstSlash : intFirstSlash = 0
+		Dim intSecondSlash : intSecondSlash = 0
+		Dim intCounter : intCounter = 1
+
+		Do While intCounter <> Len(strFilePath)
+			intFirstSlash = InStr(intCounter, strFilePath, "\")
+			If intFirstSlash = 0 Then
+				Exit Do
+			End If
+			intSecondSlash = intFirstSlash
+			intCounter = intCounter + 1
+		Loop
+		GetFileFolderName = Left(strFilePath, intSecondSlash)
+	End Function
+
+</script>
+<body bgcolor="white">
+	<p>
+	<br>
+	<input type="file" name="file" size="50"/>
+	<br>
+	</p>
+	<p>
+	<input type="button" name="btnSelectFile" id="btnSelectFile" _
+		value=" SelectFile " onclick="SelectFile">
+	<input type="button" name="btnExit" id="btnExit" _
+		value="     Exit     " onclick="Self.Close()">
+	</p>
+	<p>
+	<Span ID = "DataArea" >File Select<Span/>
+	<br>
+	</p>
+</body>
+</html>

@@ -1,0 +1,11 @@
+sfc /scannow 'system file scan
+
+bootrec /fixmbr
+bootrec /fixboot
+
+bcdedit /enum 'list drive identifiers
+bcdedit /set {identifier} safemode minimal 'switch to safemode
+
+mklink /d "TARGET" "DESTINATION"
+
+wmic bios get serialnumber
